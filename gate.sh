@@ -9,8 +9,7 @@ set -u
 cd "$(dirname "$0")"
 RAIL_BIN="${RAIL_BIN:-$HOME/projects/rail-https/rail_native}"
 [ -x "$RAIL_BIN" ] || { echo "gate: no rail_native at $RAIL_BIN" >&2; exit 2; }
-OUT="${TMPDIR:-/tmp}/plasma_gate.$$"
-mkdir -p "$OUT"
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/plasma_gate.XXXXXX")" || exit 2
 pass=0; fail=0
 for src in tests/*.rail; do
   name="$(basename "$src" .rail)"
