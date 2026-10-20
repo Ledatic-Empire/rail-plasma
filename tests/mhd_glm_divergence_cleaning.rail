@@ -1,0 +1,33 @@
+import mhd_kernel
+absf x = if x < 0.0 then 0.0 - x else x
+clean_k state psi dt ch cr k i =
+  if i >= k then 0
+  else
+    let _ = mk_glm_clean state psi (dt / to_float k) ch cr
+    clean_k state psi dt ch cr k (i + 1)
+run state psi k n =
+  if n <= 0 then state
+  else
+    let dt = mk_compute_dt_muscl state
+    let ch = 3.0 * mk_max_speed state
+    let ns = mk_muscl_step state dt
+    let _ = if k > 0 then clean_k ns psi dt ch 0.18 k 0 else 0
+    run ns psi k (n - 1)
+main =
+  let s0 = mk_init_state
+  let m0 = mk_total_mass s0
+  let e0 = mk_total_energy s0
+  let p = mk_max_div_b (run mk_init_state (mk_psi_new 0) 0 10)
+  let g = run mk_init_state (mk_psi_new 0) 4 10
+  let gd = mk_max_div_b g
+  -- GLM must cut divergence by at least 4x (measured 6.8x) ...
+  let cleaner = if gd * 4.0 < p then 1 else 0
+  -- ... without spending conservation to buy it ...
+  let dm = absf ((mk_total_mass g - m0) / m0)
+  let de = absf ((mk_total_energy g - e0) / e0)
+  let conserved = if dm < 0.0000000001 then (if de < 0.0000000001 then 1 else 0) else 0
+  -- ... and psi must actually be doing something (guards a stubbed-out clean).
+  let alive = if gd > 0.0 then 1 else 0
+  let ok = if cleaner == 1 then (if conserved == 1 then (if alive == 1 then 1 else 0) else 0) else 0
+  let _ = print (if ok == 1 then "ok" else cat ["FAIL p=", show_float p, " g=", show_float gd, " dm=", show_float dm])
+  0

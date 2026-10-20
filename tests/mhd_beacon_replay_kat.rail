@@ -1,0 +1,17 @@
+import mhd_kernel
+step_loop state n = if n <= 0 then state else step_loop (mk_lxf_step state (mk_compute_dt state)) (n - 1)
+digest raw =
+  let s = mk_init_state
+  let _ = mk_perturb_seed s raw
+  let f = step_loop s 8
+  mk_max_div_b f
+main =
+  -- Known-answer: seed 246384 is a real beacon epoch (2026-08-30 log).
+  -- The beacon reported divB=5.086209231564e-15 two frames after that
+  -- reset; replaying the seed must reproduce it exactly.
+  let a = digest 246384
+  let b = digest 987654
+  let hit = show_float a == "5.086209231564e-15"
+  let distinct = show_float a == show_float b
+  let _ = print (if hit then (if distinct then "FAIL seeds collide" else "ok") else cat ["FAIL got ", show_float a])
+  0

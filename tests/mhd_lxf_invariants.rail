@@ -1,0 +1,15 @@
+import mhd_kernel
+absf x = if x < 0.0 then 0.0 - x else x
+lf state n = if n <= 0 then state else lf (mk_lxf_step state (mk_compute_dt state)) (n - 1)
+main =
+  let s0 = mk_init_state
+  let m0 = mk_total_mass s0
+  let e0 = mk_total_energy s0
+  let a = lf mk_init_state 3
+  let dm = absf ((mk_total_mass a - m0) / m0)
+  let de = absf ((mk_total_energy a - e0) / e0)
+  let db = mk_max_div_b a
+  let rmin = mk_min_density a
+  let ok = if dm < 0.0000000001 then (if de < 0.0000000001 then (if db < 0.000000000001 then (if rmin > 0.0 then 1 else 0) else 0) else 0) else 0
+  let _ = print (if ok == 1 then "ok" else "FAIL")
+  0

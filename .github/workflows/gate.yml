@@ -1,0 +1,15 @@
+name: gate
+on: [push, pull_request]
+jobs:
+  beacon-tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rail checkout (the compiler is the committed seed)
+        uses: actions/checkout@v4
+        with:
+          repository: Ledatic-Empire/rail
+          ref: 1281e0e385c72a85943559870923f79109e54698
+          path: rail
+      - name: the four beacon tests
+        run: RAIL_BIN="$PWD/rail/rail_native" bash gate.sh
