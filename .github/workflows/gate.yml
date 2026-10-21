@@ -1,7 +1,13 @@
 name: gate
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '23 7 * * *'   # the live replay, daily
+  workflow_dispatch:
 jobs:
   beacon-tests:
+    if: github.event_name != 'schedule'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -9,7 +15,38 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Ledatic-Empire/rail
-          ref: 1281e0e385c72a85943559870923f79109e54698
+          ref: cc7924e1ee56b92fb1dc1a6d775f9965c8577269
           path: rail
-      - name: the four beacon tests
+      - name: the four beacon tests and the pinned replay
         run: RAIL_BIN="$PWD/rail/rail_native" bash gate.sh
+
+  # A stranger's replay of the newest pulse, at exactly the commits the pulse names, on a
+  # machine the house does not own. Runs on the schedule and by hand; a red run here is a
+  # finding against the beacon (or ledatic.org being down), not against a push.
+  live-replay:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - name: the newest pulse names its program
+        id: pulse
+        run: |
+          curl -fsS --max-time 30 https://ledatic.org/entropy/pulse -o pulse.json
+          rail=$(jq -r '.frame.rail_commit // empty' pulse.json)
+          plasma=$(jq -r '.frame.plasma_commit // empty' pulse.json)
+          echo "pulse $(jq -r .pulse_id pulse.json): rail=$rail plasma=$plasma os=$(jq -r '.frame.os_build // empty' pulse.json)"
+          case "$rail$plasma" in *-dirty*) echo "::error::the pulse names a dirty checkout; not replayable at a commit"; exit 1;; esac
+          [ -n "$rail" ] && [ -n "$plasma" ] || { echo "::error::the pulse names no program"; exit 1; }
+          echo "rail=$rail" >> "$GITHUB_OUTPUT"
+          echo "plasma=$plasma" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: Ledatic-Empire/rail
+          ref: ${{ steps.pulse.outputs.rail }}
+          path: rail
+      - uses: actions/checkout@v4
+        with:
+          repository: Ledatic-Empire/rail-plasma
+          ref: ${{ steps.pulse.outputs.plasma }}
+          path: plasma
+      - name: replay it
+        run: cd plasma && RAIL_BIN="$PWD/../rail/rail_native" bash replay.sh ../pulse.json

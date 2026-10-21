@@ -2,3 +2,4 @@ mhd_live
 recordings/
 ckpt_r4/
 *.out
+__pycache__/
