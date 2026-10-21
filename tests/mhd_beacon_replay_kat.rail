@@ -1,3 +1,4 @@
+import float_hex
 import mhd_kernel
 step_loop state n = if n <= 0 then state else step_loop (mk_lxf_step state (mk_compute_dt state)) (n - 1)
 digest raw =
@@ -6,12 +7,17 @@ digest raw =
   let f = step_loop s 8
   mk_max_div_b f
 main =
-  -- Known-answer: seed 246384 is a real beacon epoch (2026-08-30 log).
-  -- The beacon reported divB=5.086209231564e-15 two frames after that
-  -- reset; replaying the seed must reproduce it exactly.
+  -- Known-answer: seed 246384 is a real beacon epoch (2026-08-30 log). The beacon reported
+  -- divB=5.086209231564e-15 two frames after that reset; replaying the seed must reproduce
+  -- it exactly. The judge is the double's 64 bits (Rail stdlib/float_hex.rail, derived by
+  -- exact arithmetic, the same on every IEEE-754 platform), not snprintf's 13 digits: that
+  -- text accepted 5.086209231564e-15 itself, which is 3cf6e80000000002, two ulps from the
+  -- digest, and the Linux libc's float printer prints the digest as "0".
+  --   5.0862092315639984e-15 = 0x3cf6e80000000000 = 5864 * 2^-60 (measured 2026-10-21)
   let a = digest 246384
   let b = digest 987654
-  let hit = show_float a == "5.086209231564e-15"
-  let distinct = show_float a == show_float b
-  let _ = print (if hit then (if distinct then "FAIL seeds collide" else "ok") else cat ["FAIL got ", show_float a])
+  let ha = show_float_hex a
+  let hit = ha == "3cf6e80000000000"
+  let distinct = ha == show_float_hex b
+  let _ = print (if hit then (if distinct then "FAIL seeds collide" else "ok") else cat ["FAIL got ", ha, " (", show_float_exact a, ")"])
   0
