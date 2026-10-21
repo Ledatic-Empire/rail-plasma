@@ -83,10 +83,26 @@ wrong simulation is still reproducible. Conservation and divergence checks are t
 
 A MISMATCH on the Mini or in CI is a finding against the beacon. A MISMATCH on another
 platform is a finding against the layer under the kernel: the initial condition and the seeded
-perturbation call libSystem's `sin`; float literals go through `atof`; a frame is bits, but
-Rail's float printing goes through `snprintf`. Those are ARM64 macOS today. Tier 3 steps 3, 4
-and 8 (Rail `docs/rail-tier3-record-plan.md`) lift them out; until then a replay on another
-platform is a measurement, not a verdict.
+perturbation call libSystem's `sin`, and float literals go through `atof`. Nothing on the
+judging path prints a float: the digest is a SHA-256 over the frame's bytes, and the
+known-answer test in `tests/` judges its double by the 64 bits (`show_float_hex`, Rail
+`stdlib/float_hex.rail`, derived by exact arithmetic, so the same bits give the same hex on
+every IEEE-754 platform; Tier 3 step 3, 2026-10-21). Rail's text printers (`show_float`,
+`snprintf` on macOS, a six-decimal shim on Linux) are for reading, never for judging.
+
+Linux ARM64 is declared non-replay for now, for two measured reasons (2026-10-21, a Pi Zero 2 W
+running binaries cross-compiled on the Mini). First, the libc Rail ships for it
+(`tools/linux_libc.s`) has `sqrt` (the correctly rounded instruction, the same bits as libm's)
+but no `sin`, so the kernel does not link there (`undefined reference to _sin`, five sites).
+Second, every float literal is emitted as text and parsed at run time by `atof` (134 calls in
+the KAT's assembly), and the Linux `atof` is accumulate-then-scale, not correctly rounded:
+`show_float_hex` printed the same 16 characters on the Pi as on the Mac for every computed
+value (`0.1 + 0.2`, `1/3`, `1 + ulp`, the KAT digest's literal, signed zero, inf, NaN) and
+different ones for six long or large-exponent literals (`1.0e308` lands one ulp off, the
+smallest normal three). So the printer is platform-independent and the kernel's constants
+would not be. Tier 3 step 4 (Rail `docs/rail-tier3-record-plan.md`) lifts `sin` out of libm
+and step 8 lifts `atof` out of the compiler; until both, a replay on another platform is a
+measurement, not a verdict.
 
 ## What else runs this
 

@@ -29,8 +29,9 @@ RAIL_BIN=~/projects/rail-https/rail_native bash gate.sh
 ```
 
 Four known-answer tests, moved here from the Rail suite (t186 to t189 there until 2026-10-20):
-LxF invariants, the MUSCL divergence regression, the beacon replay from seed 246384, and GLM
-divergence cleaning; then the replay of the pinned pulse record `tests/replay_pulse.json`
+LxF invariants, the MUSCL divergence regression, the beacon replay from seed 246384 (judged by
+the 64 bits of its max|div B|, `show_float_hex`, since 2026-10-21), and GLM divergence
+cleaning; then the replay of the pinned pulse record `tests/replay_pulse.json`
 through `replay.sh`. CI runs all five on every push against a pinned Rail commit, and once a
 day replays the newest live pulse at the commits it names (`live-replay` in `gate.yml`).
 
