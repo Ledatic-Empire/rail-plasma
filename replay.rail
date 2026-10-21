@@ -87,7 +87,14 @@ replay rec out =
     let _ = mk_perturb_seed state seed
     let ctx = float_arr_new 2 0.0
     let final = mk_advance_frames state ctx frames
-    let _ = mk_dump_primitives_bin final (float_arr_new mk_prim_buffer_size 0.0) out
+    let wrote = mk_dump_primitives_bin final (float_arr_new mk_prim_buffer_size 0.0) out
+    -- A planes file that was not written must not be digested: read_file_bytes on a missing
+    -- path yields zeros, and the SHA-256 of 393,216 zero bytes (a6619f48...) was reported as
+    -- a Linux "mismatch" for a day (2026-10-21) before Tier 3 step 8 traced it to the writer.
+    if wrote == 0 then
+      let _ = print (cat ["WRITE_FAILED: ", out, " was not written; nothing to digest"])
+      2
+    else
     let got = sha256_file out planes_bytes
     let _ = print (cat ["sim_time       ", show_float (float_arr_get ctx 0)])
     let _ = print (cat ["digest         ", got])
