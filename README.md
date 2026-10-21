@@ -11,7 +11,13 @@ tag `archive/tier2-precut-2026-10-20` there, and the history of every file stays
   packs and publishes it; `mhd_beacon.sh` keeps both up. On the Mini this is launchd
   `com.ledatic.mhd`, working directory this checkout, `RAIL_DIR` pointing at the Rail checkout
   whose `rail_native` compiles it.
-- `mhd_verify_epoch.rail` replays any epoch from its logged seed; the chain audit calls it.
+- `replay.rail` is the stranger's verifier: one pulse record in, MATCH or MISMATCH out, the
+  hash computed in Rail. `bash replay.sh <pulse_id>` is the one command (`docs/REPLAY.md`).
+  The chain audit replays the newest seeded pulse through it. `mhd_verify_epoch.rail` is the
+  hand-driven form (seed and frame count in, diagnostics out).
+- Every frame's pulse names the program that made it: `frame.rail_commit`,
+  `frame.plasma_commit`, `frame.os_build`, written by `mhd_beacon.sh` before each run and
+  carried through the packer's `LDB3` trailer.
 - `mhd_kernel.rail`, `mhd_axisym.rail`, `mhd_mpd.rail`: the solvers. Programs import them bare
   (`import mhd_kernel`), which resolves in this directory; `import time` resolves in the Rail
   checkout's `stdlib/` next to the `rail_native` that is running.
@@ -24,7 +30,9 @@ RAIL_BIN=~/projects/rail-https/rail_native bash gate.sh
 
 Four known-answer tests, moved here from the Rail suite (t186 to t189 there until 2026-10-20):
 LxF invariants, the MUSCL divergence regression, the beacon replay from seed 246384, and GLM
-divergence cleaning. CI runs them on every push against a pinned Rail commit.
+divergence cleaning; then the replay of the pinned pulse record `tests/replay_pulse.json`
+through `replay.sh`. CI runs all five on every push against a pinned Rail commit, and once a
+day replays the newest live pulse at the commits it names (`live-replay` in `gate.yml`).
 
 ## Everything else
 

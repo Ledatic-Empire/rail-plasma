@@ -17,12 +17,15 @@
 -- the beacon would require the physics itself to be forged, not merely
 -- the hash to be swapped.
 --
--- This tool and the beacon share ONE implementation of the initial
--- condition, the perturbation and the step (stdlib/mhd_kernel.rail).
--- A verifier that has drifted from the producer proves nothing.
+-- This tool, replay.rail and the beacon share ONE implementation of the
+-- initial condition, the perturbation, the step and the frame
+-- (mhd_kernel.rail). A verifier that has drifted from the producer proves
+-- nothing. For a pulse record, replay.rail (via replay.sh) is the one
+-- command; this tool is the hand-driven form that also prints the
+-- diagnostics.
 --
 -- Usage:
---   ./rail_native run tools/plasma/mhd_verify_epoch.rail <seed> <frames>
+--   ./rail_native run mhd_verify_epoch.rail <seed> <frames>
 --
 --   <seed>    the integer logged by the beacon at reset ("seed=NNNNNN")
 --   <frames>  how many beacon frames after that reset to advance
@@ -40,22 +43,9 @@
 
 import mhd_kernel
 
-steps_per_frame = 4
-
--- One beacon frame: 4 LF steps, accumulating sim_time exactly as
--- mhd_beacon.rail's inner_step does.
-adv_frame state ctx k =
-  if k >= steps_per_frame then state
-  else
-    let dt = mk_compute_dt state
-    let ns = mk_lxf_step state dt
-    let _ = float_arr_set ctx 0 (float_arr_get ctx 0 + dt)
-    let _ = float_arr_set ctx 1 dt
-    adv_frame ns ctx (k + 1)
-
-adv_frames state ctx n =
-  if n <= 0 then state
-  else adv_frames (adv_frame state ctx 0) ctx (n - 1)
+-- One beacon frame is mk_steps_per_frame LF steps; the definition lives in
+-- mhd_kernel.rail (mk_advance_frames) so this tool and replay.rail share it.
+steps_per_frame = mk_steps_per_frame
 
 nth_arg xs i =
   if i <= 0 then head xs
@@ -82,7 +72,7 @@ report seed frames expect dump =
   let m0 = mk_total_mass state
   let e0 = mk_total_energy state
   let ctx = float_arr_new 2 0.0
-  let final = adv_frames state ctx frames
+  let final = mk_advance_frames state ctx frames
 
   let t = float_arr_get ctx 0
   let mass = mk_total_mass final

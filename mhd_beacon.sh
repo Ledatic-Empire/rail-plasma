@@ -40,11 +40,29 @@ trap "kill ${DAEMON_PID} 2>/dev/null" EXIT
 
 cd "${PLASMA_DIR}"
 
+# The program behind every frame, for the pulse's frame block (Tier 3, step 2): the Rail
+# commit whose committed rail_native compiles the beacon, this checkout's commit, and the OS
+# build. Written before each run so a pull between restarts is recorded, not guessed; a
+# checkout with modified tracked files says so ("-dirty"), because then the commit is not the
+# program. The packer daemon copies these three lines into the frame trailer (LDB3) and
+# beacon_v2.py publishes them as frame.rail_commit, frame.plasma_commit, frame.os_build.
+write_provenance() {
+    local rail plasma os
+    rail="$(git -C "${RAIL_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
+    [ -n "$(git -C "${RAIL_DIR}" status --porcelain --untracked-files=no 2>/dev/null)" ] && rail="${rail}-dirty"
+    plasma="$(git -C "${PLASMA_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
+    [ -n "$(git -C "${PLASMA_DIR}" status --porcelain --untracked-files=no 2>/dev/null)" ] && plasma="${plasma}-dirty"
+    os="$(sw_vers -buildVersion 2>/dev/null || uname -r)"
+    printf '%s\n%s\n%s\n' "$rail" "$plasma" "$os" > /tmp/mhd_beacon/provenance.txt.tmp \
+        && mv /tmp/mhd_beacon/provenance.txt.tmp /tmp/mhd_beacon/provenance.txt
+}
+
 # --out-prefix lands the compiled beacon at a DEDICATED path, not the shared
 # /tmp/rail_out. Without it, `run` squats /tmp/rail_out as its running binary,
 # so every concurrent `rail_native <file>` compile on this host either
 # clobbers the beacon or gets ETXTBSY against it (the live binary is busy).
 while true; do
+    write_provenance
     "${RAIL_BIN}" --out-prefix /tmp/ledatic_mhd_out run "${BEACON_RAIL}"
     rc=$?
     echo "mhd_beacon: rail exited (rc=${rc}); restarting in 2s" >&2

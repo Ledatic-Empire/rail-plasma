@@ -37,6 +37,13 @@ DUMP_DIR = "/tmp/mhd_beacon"
 FIFO_PATH = os.path.join(DUMP_DIR, "ready")
 META_PATH = os.path.join(DUMP_DIR, "meta.txt")
 PLANES_PATH = os.path.join(DUMP_DIR, "planes.f32")
+# Three lines written by mhd_beacon.sh before each run: the Rail commit (the compiler), the
+# rail-plasma commit (the solver) and the OS build. With them the trailer is LDB3: the three
+# fields, NUL-padded, then the LDB2 tail with magic LDB3. Without them (an older wrapper, a
+# tree with no git) the trailer stays LDB2 and the pulse carries no program fields.
+PROV_PATH = os.path.join(DUMP_DIR, "provenance.txt")
+PROGRAM = struct.Struct("<48s48s24s")
+TRAILER = struct.Struct("<4sIII")
 OUT_PATH = os.environ.get("MHD_BEACON_OUT", "/tmp/plasma_live_rail.bin")
 TMP_PATH = OUT_PATH + ".tmp"
 
@@ -55,6 +62,19 @@ except Exception as _e:
 CHAMBER_FMT_RGB8 = 1
 
 
+def read_program():
+    """The three provenance lines as bytes sized for PROGRAM, or None when absent."""
+    try:
+        with open(PROV_PATH) as f:
+            lines = [line.strip() for line in f.read().split("\n")]
+    except OSError:
+        return None
+    if len(lines) < 3 or not all(lines[:3]):
+        return None
+    return [lines[0].encode("ascii", "replace")[:48], lines[1].encode("ascii", "replace")[:48],
+            lines[2].encode("ascii", "replace")[:24]]
+
+
 def pack_one():
     try:
         with open(META_PATH) as f:
@@ -70,7 +90,11 @@ def pack_one():
         # it. Carried in a fixed trailer so the publisher reads one atomic file.
         provenance = b""
         if len(m) >= 11:
-            provenance = struct.pack("<4sIII", b"LDB2", int(m[9]), int(m[10]), frame_id)
+            program = read_program()
+            if program is None:
+                provenance = TRAILER.pack(b"LDB2", int(m[9]), int(m[10]), frame_id)
+            else:
+                provenance = PROGRAM.pack(*program) + TRAILER.pack(b"LDB3", int(m[9]), int(m[10]), frame_id)
 
         with open(PLANES_PATH, "rb") as f:
             planes = f.read()

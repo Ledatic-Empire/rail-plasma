@@ -307,6 +307,30 @@ mk_compute_dt state =
   0.00981747704246810 / smax
 
 -- ═══════════════════════════════════════════════════════════
+-- ONE BEACON FRAME = mk_steps_per_frame LF steps with CFL dt.
+-- The beacon (mhd_beacon.rail, in place and double-buffered) and every
+-- replay (mhd_verify_epoch.rail, replay.rail) must advance a frame the
+-- same way; the replays share this one definition so they cannot drift
+-- from each other. ctx[0] accumulates sim_time, ctx[1] holds the last dt,
+-- exactly as the beacon's inner_step keeps them.
+-- ═══════════════════════════════════════════════════════════
+
+mk_steps_per_frame = 4
+
+mk_advance_frame state ctx k =
+  if k >= mk_steps_per_frame then state
+  else
+    let dt = mk_compute_dt state
+    let ns = mk_lxf_step state dt
+    let _ = float_arr_set ctx 0 (float_arr_get ctx 0 + dt)
+    let _ = float_arr_set ctx 1 dt
+    mk_advance_frame ns ctx (k + 1)
+
+mk_advance_frames state ctx n =
+  if n <= 0 then state
+  else mk_advance_frames (mk_advance_frame state ctx 0) ctx (n - 1)
+
+-- ═══════════════════════════════════════════════════════════
 -- MUSCL + MINMOD RECONSTRUCTION (2nd-order space, 1st-order time)
 -- Positivity-preserving via density floor + pressure floor in flux.
 -- This is the recon path missing from the retired Metal axisym solver

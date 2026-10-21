@@ -1,0 +1,118 @@
+-- replay.rail: a stranger's verifier for one pulse of the ledatic.org entropy beacon.
+--
+-- A format 2 pulse says, in its `frame` block, which number it carries (`digest`, the
+-- SHA-256 of 393,216 float32 bytes), from which inputs (`epoch_seed`, `epoch_frame`) and,
+-- since 2026-10-21, by which program (`rail_commit`, `plasma_commit`, `os_build`). This
+-- program takes that record, rebuilds the frame from the seed with the same kernel the
+-- beacon runs (mhd_kernel.rail: the initial condition, the seeded perturbation and the
+-- Lax-Friedrichs step), hashes the planes in pure Rail, and prints MATCH or MISMATCH.
+--
+--   ./rail_native run replay.rail <pulse.json> [planes.f32]
+--
+-- Exit 0 MATCH, 1 MISMATCH, 2 when the record cannot be replayed (no epoch seed, not a
+-- pulse record). The one-command form, which also fetches the record, is `bash replay.sh`.
+--
+-- What MATCH proves: that this machine, running this source, derives the published digest
+-- from the published seed. It says nothing about whether the physics is right, only that
+-- the record is the output of the program it names. A MISMATCH on a different platform
+-- is a finding, not a verdict: libSystem's sin, atof and snprintf sit under the kernel
+-- until Tier 3 steps 3, 4 and 8 lift them out (docs/REPLAY.md).
+
+import bytes
+import sha256
+import json
+import mhd_kernel
+
+-- 6 planes x 128 x 128 cells x 4 bytes: the bytes the digest is defined over.
+planes_bytes = 393216
+
+nth_arg xs i =
+  if i <= 0 then head xs
+  else nth_arg (tail xs) (i - 1)
+
+copy_bytes buf arr i n =
+  if i >= n then 0
+  else
+    let _ = arr_set arr i (byte_at buf i)
+    copy_bytes buf arr (i + 1) n
+
+-- SHA-256 of exactly n bytes of a file, computed by stdlib/sha256.rail.
+sha256_file path n =
+  let buf = read_file_bytes path
+  let arr = arr_new n 0
+  let _ = copy_bytes buf arr 0 n
+  let st = sha256_init 0
+  let _ = sha256_update_arr st arr 0 n
+  sha256_finalize_hex st
+
+field_or obj key missing =
+  let v = json_str (json_get obj key)
+  if v == "" then missing else v
+
+usage _ =
+  let _ = print "usage: replay <pulse.json> [planes.f32]"
+  let _ = print "  <pulse.json>  one record from https://ledatic.org/entropy/pulse/<id>"
+  let _ = print "  [planes.f32]  where to write the replayed frame (default /tmp/rail_replay_planes.f32)"
+  2
+
+replay rec out =
+  let frame = json_get rec "frame"
+  let pulse = json_int (json_get rec "pulse_id")
+  let status = json_int (json_get rec "status")
+  let seed = json_int (json_get frame "epoch_seed")
+  let ef = json_int (json_get frame "epoch_frame")
+  let want = json_str (json_get frame "digest")
+  let _ = print (cat ["pulse          ", show pulse, "  ", json_str (json_get rec "timestamp_utc")])
+  let _ = print (cat ["epoch_seed     ", show seed])
+  let _ = print (cat ["epoch_frame    ", show ef])
+  let _ = print (cat ["rail_commit    ", field_or frame "rail_commit" "(not recorded)"])
+  let _ = print (cat ["plasma_commit  ", field_or frame "plasma_commit" "(not recorded)"])
+  let _ = print (cat ["os_build       ", field_or frame "os_build" "(not recorded)"])
+  if head frame != "obj" then
+    let _ = print "NOT_A_PULSE: no frame block"
+    2
+  else if seed < 0 then
+    let _ = print "NO_PROVENANCE: this pulse names no epoch seed; nothing to replay"
+    2
+  else if bit_and status 4 != 0 then
+    let _ = print "NO_PROVENANCE: status bit 2 is set; nothing to replay"
+    2
+  else if length (chars want) != 64 then
+    let _ = print "NOT_A_PULSE: frame.digest is not 64 hex characters"
+    2
+  else
+    let frames = ef + 1
+    let _ = print (cat ["replaying      ", show frames, " frames (", show (frames * mk_steps_per_frame), " LF steps)"])
+    let state = mk_init_state
+    let _ = mk_perturb_seed state seed
+    let ctx = float_arr_new 2 0.0
+    let final = mk_advance_frames state ctx frames
+    let _ = mk_dump_primitives_bin final (float_arr_new mk_prim_buffer_size 0.0) out
+    let got = sha256_file out planes_bytes
+    let _ = print (cat ["sim_time       ", show_float (float_arr_get ctx 0)])
+    let _ = print (cat ["digest         ", got])
+    let _ = print (cat ["frame.digest   ", want])
+    if got == want then
+      let _ = print "MATCH"
+      0
+    else
+      let _ = print "MISMATCH"
+      1
+
+main =
+  let a = args
+  let n = length a
+  if n < 2 then usage 0
+  else
+    let path = nth_arg a 1
+    let out = if n >= 3 then nth_arg a 2 else "/tmp/rail_replay_planes.f32"
+    let src = read_file path
+    if src == "" then
+      let _ = print (cat ["NOT_A_PULSE: cannot read ", path])
+      2
+    else
+      let rec = parse_json src
+      if head rec != "obj" then
+        let _ = print (cat ["NOT_A_PULSE: ", path, " is not a JSON object"])
+        2
+      else replay rec out
