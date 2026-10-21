@@ -88,28 +88,29 @@ initial condition and the seeded perturbation take `sin` from Rail's `stdlib/mat
 (a fixed integer algorithm at 24 fractional bits, within 1.43e-7 of libm, the same bits on any
 machine with 64-bit integers), and what remains of libm is `sqrt` (IEEE-754 requires it
 correctly rounded, so every libm agrees) and `fmod` inside the runtime's generic `%` (exact by
-definition). Float literals still go through `atof` (step 8). Nothing on the
+definition). Float literals are the 64 bits the compiler decided (Rail `tools/decimal64.rail`,
+step 8, 2026-10-21): no `atof` runs. Nothing on the
 judging path prints a float: the digest is a SHA-256 over the frame's bytes, and the
 known-answer test in `tests/` judges its double by the 64 bits (`show_float_hex`, Rail
 `stdlib/float_hex.rail`, derived by exact arithmetic, so the same bits give the same hex on
 every IEEE-754 platform; Tier 3 step 3, 2026-10-21). Rail's text printers (`show_float`,
 `snprintf` on macOS, a six-decimal shim on Linux) are for reading, never for judging.
 
-Linux ARM64 is declared non-replay for now, for one remaining measured reason (2026-10-21, a Pi
-Zero 2 W running binaries cross-compiled on the Mini). The first reason, that the libc Rail
-ships for it (`tools/linux_libc.s`) had no `sin` so the kernel did not link there, ended with
-step 4: the kernel calls no `sin`, the known-answer test links, and on the Pi it printed `ok`
-(the same 64 bits as the Mac for its 8-step max|div B|). The remaining one: every float
-literal is emitted as text and parsed at run time by `atof` (139 calls in the KAT's assembly, a
-few of them the fixed-point module's own), and the Linux `atof` is accumulate-then-scale, not
-correctly rounded. Measured on the kernel's own constants: 12 of its 29 float literals parse to
-different bits on the Pi, among them the grid step `0.04908738521234052` (one ulp), the density
-`2.77777777777778` (two ulps) and `0.3` (one ulp); the other 17, and every computed value, are
-identical. So a full replay differs: the record pinned before step 4 (38 frames, 152 steps)
-replayed on the Pi in 82 s to digest `a6619f48...`, where the Mini's new kernel gives
-`acf59368...` for the same record. Tier 3 step 8 (Rail `docs/rail-tier3-record-plan.md`)
-lifts `atof` out of the compiler; whether the literals were the only difference is what step 8
-measures. Until then, a replay on another platform is a measurement, not a verdict.
+Linux ARM64 replays (measured 2026-10-21 on a Pi Zero 2 W, Debian 6.6.51, running binaries
+cross-compiled on the Mini). The first reason it was declared non-replay, no `sin` in the libc
+Rail ships for it, ended with step 4. The second, that a replay on the Pi gave a different
+digest, had been read as the twelve of the kernel's 29 float literals that the Linux `atof`
+parsed one or two ulps off; step 8 removed `atof` from every literal (all 38 probed literals,
+the kernel's 31 included, now hold the Mini's bits on the Pi) and the digest did not move,
+because it was never numerical: the runtime's float32 file writer issued raw Darwin syscalls,
+wrote nothing on Linux, and the replay digested 393,216 bytes of a file that did not exist,
+whose SHA-256 is `a6619f48...`. With Linux versions of the writer and reader (Rail
+`tools/linux_libc.s`) the Pi replays step 4's 38-frame record (152 steps) to `acf59368...`, the
+digest the Mini's kernel gives it, and the two planes files `cmp` equal byte for byte.
+`replay.rail` now refuses a planes file it did not write (`WRITE_FAILED`, exit 2) instead of
+digesting zeros. What the Pi cannot do yet is the record pinned here (64 frames, 256 steps): the
+Linux build's static 1 GB heap exceeds the box's 416 MB and it reset twice under the attempt, so
+a Pi verdict needs a record its memory holds, or a Linux heap that collects sooner.
 
 ## What else runs this
 
