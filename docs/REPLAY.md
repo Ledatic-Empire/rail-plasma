@@ -82,27 +82,34 @@ wrong simulation is still reproducible. Conservation and divergence checks are t
 (`gate.sh`), not the replay's.
 
 A MISMATCH on the Mini or in CI is a finding against the beacon. A MISMATCH on another
-platform is a finding against the layer under the kernel: the initial condition and the seeded
-perturbation call libSystem's `sin`, and float literals go through `atof`. Nothing on the
+platform is a finding against the layer under the kernel. Since Tier 3 step 4 (2026-10-21) no
+libm function whose result the standard leaves to the implementation is on that path: the
+initial condition and the seeded perturbation take `sin` from Rail's `stdlib/math_exact.rail`
+(a fixed integer algorithm at 24 fractional bits, within 1.43e-7 of libm, the same bits on any
+machine with 64-bit integers), and what remains of libm is `sqrt` (IEEE-754 requires it
+correctly rounded, so every libm agrees) and `fmod` inside the runtime's generic `%` (exact by
+definition). Float literals still go through `atof` (step 8). Nothing on the
 judging path prints a float: the digest is a SHA-256 over the frame's bytes, and the
 known-answer test in `tests/` judges its double by the 64 bits (`show_float_hex`, Rail
 `stdlib/float_hex.rail`, derived by exact arithmetic, so the same bits give the same hex on
 every IEEE-754 platform; Tier 3 step 3, 2026-10-21). Rail's text printers (`show_float`,
 `snprintf` on macOS, a six-decimal shim on Linux) are for reading, never for judging.
 
-Linux ARM64 is declared non-replay for now, for two measured reasons (2026-10-21, a Pi Zero 2 W
-running binaries cross-compiled on the Mini). First, the libc Rail ships for it
-(`tools/linux_libc.s`) has `sqrt` (the correctly rounded instruction, the same bits as libm's)
-but no `sin`, so the kernel does not link there (`undefined reference to _sin`, five sites).
-Second, every float literal is emitted as text and parsed at run time by `atof` (134 calls in
-the KAT's assembly), and the Linux `atof` is accumulate-then-scale, not correctly rounded:
-`show_float_hex` printed the same 16 characters on the Pi as on the Mac for every computed
-value (`0.1 + 0.2`, `1/3`, `1 + ulp`, the KAT digest's literal, signed zero, inf, NaN) and
-different ones for six long or large-exponent literals (`1.0e308` lands one ulp off, the
-smallest normal three). So the printer is platform-independent and the kernel's constants
-would not be. Tier 3 step 4 (Rail `docs/rail-tier3-record-plan.md`) lifts `sin` out of libm
-and step 8 lifts `atof` out of the compiler; until both, a replay on another platform is a
-measurement, not a verdict.
+Linux ARM64 is declared non-replay for now, for one remaining measured reason (2026-10-21, a Pi
+Zero 2 W running binaries cross-compiled on the Mini). The first reason, that the libc Rail
+ships for it (`tools/linux_libc.s`) had no `sin` so the kernel did not link there, ended with
+step 4: the kernel calls no `sin`, the known-answer test links, and on the Pi it printed `ok`
+(the same 64 bits as the Mac for its 8-step max|div B|). The remaining one: every float
+literal is emitted as text and parsed at run time by `atof` (139 calls in the KAT's assembly, a
+few of them the fixed-point module's own), and the Linux `atof` is accumulate-then-scale, not
+correctly rounded. Measured on the kernel's own constants: 12 of its 29 float literals parse to
+different bits on the Pi, among them the grid step `0.04908738521234052` (one ulp), the density
+`2.77777777777778` (two ulps) and `0.3` (one ulp); the other 17, and every computed value, are
+identical. So a full replay differs: the record pinned before step 4 (38 frames, 152 steps)
+replayed on the Pi in 82 s to digest `a6619f48...`, where the Mini's new kernel gives
+`acf59368...` for the same record. Tier 3 step 8 (Rail `docs/rail-tier3-record-plan.md`)
+lifts `atof` out of the compiler; whether the literals were the only difference is what step 8
+measures. Until then, a replay on another platform is a measurement, not a verdict.
 
 ## What else runs this
 
