@@ -21,6 +21,15 @@
 --   - no top-level float globals (segfault when accessed under TCO chain)
 --   - all derived constants as precomputed literals
 --   - 1D loops only (3+ arg 2D recursive loops do not TCO reliably)
+--
+-- No libm on the replay path (Tier 3, step 4, 2026-10-21): the initial
+-- condition and the seeded perturbation take sin from Rail's
+-- stdlib/math_exact.rail (sin_fixed: a fixed integer algorithm at F = 24,
+-- within 1.43e-7 of libm, the same bits on every machine), not from the
+-- platform's libm, whose sin differs in its last bits between libcs. sqrt
+-- stays: IEEE-754 requires it correctly rounded, so every libm agrees.
+
+import math_exact
 
 -- ═══════════════════════════════════════════════════════════
 -- GRID CONSTANTS (integer only at top level)
@@ -61,10 +70,10 @@ mk_init_cell state i =
   let xp = to_float x * 0.04908738521234052
   let yp = to_float y * 0.04908738521234052
   let rho = 2.77777777777778
-  let vx = 0.0 - sin yp
-  let vy = sin xp
-  let bx = 0.0 - sin yp
-  let by = sin (2.0 * xp)
+  let vx = 0.0 - sin_fixed yp
+  let vy = sin_fixed xp
+  let bx = 0.0 - sin_fixed yp
+  let by = sin_fixed (2.0 * xp)
   let p = 1.6666666666666667
   let ke = 0.5 * rho * (vx * vx + vy * vy)
   let me = 0.5 * (bx * bx + by * by)
@@ -133,8 +142,8 @@ mk_perturb_cell state ph i =
   let me  = 0.5 * (bx * bx + by * by)
   let ke0 = 0.5 * (mx * mx + my * my) / rho
   let p   = (en - ke0 - me) * 0.6666666666666667
-  let mx2 = mx + rho * 0.02 * sin (yp + ph)
-  let my2 = my + rho * 0.02 * sin (xp + ph)
+  let mx2 = mx + rho * 0.02 * sin_fixed (yp + ph)
+  let my2 = my + rho * 0.02 * sin_fixed (xp + ph)
   let ke1 = 0.5 * (mx2 * mx2 + my2 * my2) / rho
   let _ = mk_put state mk_f_mx x y mx2
   let _ = mk_put state mk_f_my x y my2
