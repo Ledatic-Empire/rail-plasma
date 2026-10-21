@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Ledatic-Empire/rail
-          ref: 52403c469fb334429f2a30e79bc55f2cb45de3cd
+          ref: 097cd7fd525b24f9979f608741ea508f4eb3f365
           path: rail
       - name: the four beacon tests and the pinned replay
         run: RAIL_BIN="$PWD/rail/rail_native" bash gate.sh
