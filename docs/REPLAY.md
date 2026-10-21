@@ -117,6 +117,11 @@ measures. Until then, a replay on another platform is a measurement, not a verdi
   and pull request (GitHub `macos-latest`, Rail pinned).
 - The house's chain audit replays the newest seeded pulse from its archive through the same
   `replay.sh` and reports `REPLAY=match|mismatch|error` beside the signature and link checks.
+- The off-box witness (Tier 3 step 7, since 2026-10-21): every day the Mini replays the newest
+  seeded pulse ledatic.org serves, and a second Mac on the house tailnet fetches the same record
+  on its own, checks out the Rail and rail-plasma commits the record names from the public repos,
+  and replays it with that compiler. Each machine logs `match`, `mismatch` or `error` for the
+  pulse; anything but match on both rings the owner.
 - `mhd_verify_epoch.rail` is the hand-driven form: seed and frame count in, diagnostics out,
   planes optionally written. It and `replay.rail` advance a frame through one definition,
   `mk_advance_frames` in `mhd_kernel.rail`.
