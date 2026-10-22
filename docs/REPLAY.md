@@ -89,7 +89,9 @@ initial condition and the seeded perturbation take `sin` from Rail's `stdlib/mat
 machine with 64-bit integers), and what remains of libm is `sqrt` (IEEE-754 requires it
 correctly rounded, so every libm agrees) and `fmod` inside the runtime's generic `%` (exact by
 definition). Float literals are the 64 bits the compiler decided (Rail `tools/decimal64.rail`,
-step 8, 2026-10-21): no `atof` runs. Nothing on the
+step 8, 2026-10-21), and a number read from the record's JSON goes through the same conversion
+compiled into the program (`parse_float` is `d64_parse_float` since 2026-10-22): no `atof`
+runs, and a program compiled with that seed imports none. Nothing on the
 judging path prints a float: the digest is a SHA-256 over the frame's bytes, and the
 known-answer test in `tests/` judges its double by the 64 bits (`show_float_hex`, Rail
 `stdlib/float_hex.rail`, derived by exact arithmetic, so the same bits give the same hex on
